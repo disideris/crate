@@ -28,6 +28,7 @@ import io.crate.external.S3ClientHelper;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.net.URI;
 import java.util.LinkedList;
@@ -37,6 +38,8 @@ import java.util.function.Predicate;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 
@@ -57,12 +60,12 @@ public class S3FileInputTest extends ESTestCase {
 
     @BeforeClass
     public static void setUpClass() throws Exception {
-        preGlobUri = new URI("s3://fakeBucket/prefix");
+        preGlobUri = new URI("s3://" + BUCKET_NAME + "/" + PREFIX);
         s3FileInput = new S3FileInput(clientBuilder);
 
         when(uriPredicate.test(any(URI.class))).thenReturn(true);
         when(amazonS3.listObjects(BUCKET_NAME, PREFIX)).thenReturn(objectListing);
-        when(clientBuilder.client(preGlobUri)).thenReturn(amazonS3);
+        when(clientBuilder.client(any(S3ClientHelper.S3URIWapper.class))).thenReturn(amazonS3);
     }
 
     @Test
@@ -79,6 +82,9 @@ public class S3FileInputTest extends ESTestCase {
         assertThat(uris.size(), is(2));
         assertThat(uris.get(0).toString(), is("s3://fakeBucket/prefix/test1.json.gz"));
         assertThat(uris.get(1).toString(), is("s3://fakeBucket/prefix/test2.json.gz"));
+        ArgumentCaptor<S3ClientHelper.S3URIWapper> argumentCaptor = ArgumentCaptor.forClass(S3ClientHelper.S3URIWapper.class);
+        verify(clientBuilder, times(1)).client(argumentCaptor.capture());
+        assertEquals(BUCKET_NAME, argumentCaptor.getValue().getBucketName());
     }
 
     @Test
@@ -89,6 +95,9 @@ public class S3FileInputTest extends ESTestCase {
         assertThat(uris.size(), is(2));
         assertThat(uris.get(0).toString(), is("s3://fakeBucket/prefix/test1.json.gz"));
         assertThat(uris.get(1).toString(), is("s3://fakeBucket/prefix/test2.json.gz"));
+        ArgumentCaptor<S3ClientHelper.S3URIWapper> argumentCaptor = ArgumentCaptor.forClass(S3ClientHelper.S3URIWapper.class);
+        verify(clientBuilder, times(1)).client(argumentCaptor.capture());
+        assertEquals(BUCKET_NAME, argumentCaptor.getValue().getBucketName());
     }
 
     private List<S3ObjectSummary> objectSummaries() {

@@ -19,12 +19,9 @@
  * software solely pursuant to the terms of the relevant commercial agreement.
  */
 
-package io.crate.copy.s3;
+package io.crate.execution.engine.export;
 
-import io.crate.execution.engine.export.FileOutput;
-import io.crate.execution.engine.export.FileOutputFactory;
-
-class S3FileOutputFactory implements FileOutputFactory {
+public class S3FileOutputFactory implements FileOutputFactory {
 
     public static final String NAME = "s3";
 

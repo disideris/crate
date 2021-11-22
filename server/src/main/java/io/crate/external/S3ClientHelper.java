@@ -85,39 +85,80 @@ public class S3ClientHelper {
         );
     }
 
-    public AmazonS3 client(URI uri) throws IOException {
-        String accessKey = null;
-        String secretKey = null;
-        if (uri.getHost() == null) {
-            throw new IllegalArgumentException(INVALID_URI_MSG);
-        }
-        if (uri.getUserInfo() != null) {
-            String[] userInfoParts = uri.getUserInfo().split(":");
-            try {
-                accessKey = userInfoParts[0];
-                secretKey = userInfoParts[1];
-            } catch (ArrayIndexOutOfBoundsException e) {
-                // ignore
-            }
-            // if the URI contains '@' and ':', a UserInfo is in fact given, but could not
-            // be parsed properly because the URI is not valid (e.g. not properly encoded).
-        } else if (uri.toString().contains("@") && uri.toString().contains(":")) {
-            throw new IllegalArgumentException(INVALID_URI_MSG);
-        }
-        return client(accessKey, secretKey);
+    public AmazonS3 client(S3URIWapper uri) throws IOException {
+        return client(uri.getAccessKey(), uri.getSecretKey(), uri.getEndpoint());
     }
 
-    private AmazonS3 client(@Nullable String accessKey, @Nullable String secretKey) throws IOException {
+    private AmazonS3 client(@Nullable String accessKey, @Nullable String secretKey, @Nullable String endpoint) throws IOException {
         int hash = hash(accessKey, secretKey);
         AmazonS3 client = clientMap.get(hash);
         if (client == null) {
             client = initClient(accessKey, secretKey);
             clientMap.put(hash, client);
         }
+        if (endpoint != null) {
+            client.setEndpoint(endpoint);
+        }
         return client;
     }
 
     private static int hash(@Nullable String accessKey, @Nullable String secretKey) {
         return 31 * (accessKey == null ? 1 : accessKey.hashCode()) + (secretKey == null ? 1 : secretKey.hashCode());
+    }
+
+    public static class S3URIWapper {
+        private String accessKey;
+        private String secretKey;
+        private final String bucketName;
+        private final String endpoint;
+
+        public S3URIWapper(URI uri) {
+            if (uri.getUserInfo() != null) {
+                String[] userInfoParts = uri.getUserInfo().split(":");
+                try {
+                    accessKey = userInfoParts[0];
+                    secretKey = userInfoParts[1];
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    // ignore
+                }
+                // if the URI contains '@' and ':', a UserInfo is in fact given, but could not
+                // be parsed properly because the URI is not valid (e.g. not properly encoded).
+            } else if (uri.toString().contains("@") && uri.toString().contains(":")) {
+                throw new IllegalArgumentException(INVALID_URI_MSG);
+            }
+            String host = uri.getHost();
+            if (host == null) {
+                throw new IllegalArgumentException(INVALID_URI_MSG);
+            } else {
+                int idxToSplit = host.indexOf('.');
+                if (idxToSplit == -1) {
+                    bucketName = host;
+                    endpoint = null;
+                } else {
+                    try {
+                        bucketName = host.substring(0, idxToSplit);
+                        endpoint = host.substring(idxToSplit + 1);
+                    } catch (IndexOutOfBoundsException e) {
+                        throw new IllegalArgumentException(INVALID_URI_MSG);
+                    }
+                }
+            }
+        }
+
+        public String getAccessKey() {
+            return accessKey;
+        }
+
+        public String getSecretKey() {
+            return secretKey;
+        }
+
+        public String getBucketName() {
+            return bucketName;
+        }
+
+        public String getEndpoint() {
+            return endpoint;
+        }
     }
 }

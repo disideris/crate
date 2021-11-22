@@ -19,7 +19,7 @@
  * software solely pursuant to the terms of the relevant commercial agreement.
  */
 
-package io.crate.copy.s3;
+package io.crate.execution.engine.export;
 
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
@@ -30,7 +30,6 @@ import com.amazonaws.services.s3.model.UploadPartRequest;
 import com.amazonaws.services.s3.model.UploadPartResult;
 import io.crate.concurrent.CompletableFutures;
 import io.crate.execution.dsl.projection.WriterProjection;
-import io.crate.execution.engine.export.FileOutput;
 import io.crate.external.S3ClientHelper;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -47,7 +46,7 @@ import java.util.concurrent.Executor;
 import java.util.zip.GZIPOutputStream;
 
 @NotThreadSafe
- class S3FileOutput implements FileOutput {
+public class S3FileOutput implements FileOutput {
 
     @Override
     public OutputStream acquireOutputStream(Executor executor, URI uri, WriterProjection.CompressionType compressionType) throws IOException {
@@ -76,10 +75,11 @@ import java.util.zip.GZIPOutputStream;
 
         private S3OutputStream(Executor executor, URI uri, S3ClientHelper s3ClientHelper) throws IOException {
             this.executor = executor;
-            bucketName = uri.getHost();
             key = uri.getPath().substring(1);
             outputStream = new ByteArrayOutputStream();
-            client = s3ClientHelper.client(new S3ClientHelper.S3URIWapper(uri)); // remove the entire file and copy over
+            var uriHelper = new S3ClientHelper.S3URIWapper(uri);
+            bucketName = uriHelper.getBucketName();
+            client = s3ClientHelper.client(uriHelper);
             multipartUpload = client.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucketName, key));
         }
 

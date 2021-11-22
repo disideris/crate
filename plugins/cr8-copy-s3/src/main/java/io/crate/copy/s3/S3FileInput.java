@@ -57,13 +57,13 @@ public class S3FileInput implements FileInput {
     public List<URI> listUris(@Nullable final URI fileUri,
                               final URI preGlobUri,
                               final Predicate<URI> uriPredicate) throws IOException {
-        String bucketName = preGlobUri.getHost();
+        var uriHelper = new S3ClientHelper.S3URIWapper(preGlobUri);
         if (client == null) {
-            client = clientBuilder.client(preGlobUri);
+            client = clientBuilder.client(uriHelper);
         }
         String prefix = preGlobUri.getPath().length() > 1 ? preGlobUri.getPath().substring(1) : "";
         List<URI> uris = new ArrayList<>();
-        ObjectListing list = client.listObjects(bucketName, prefix);
+        ObjectListing list = client.listObjects(uriHelper.getBucketName(), prefix);
         addKeyUris(uris, list, preGlobUri, uriPredicate);
         while (list.isTruncated()) {
             list = client.listNextBatchOfObjects(list);
@@ -91,11 +91,12 @@ public class S3FileInput implements FileInput {
 
     @Override
     public InputStream getStream(URI uri) throws IOException {
+        var uriHelper = new S3ClientHelper.S3URIWapper(uri);
         if (client == null) {
-            client = clientBuilder.client(uri);
+            client = clientBuilder.client(uriHelper);
         }
         String key = uri.getPath().length() > 1 ? uri.getPath().substring(1) : "";
-        S3Object object = client.getObject(uri.getHost(), key);
+        S3Object object = client.getObject(uriHelper.getBucketName(), key);
         if (object != null) {
             return object.getObjectContent();
         }
