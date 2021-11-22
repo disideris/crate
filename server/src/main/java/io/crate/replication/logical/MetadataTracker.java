@@ -22,6 +22,7 @@
 package io.crate.replication.logical;
 
 import io.crate.common.annotations.VisibleForTesting;
+import io.crate.common.collections.Tuple;
 import io.crate.common.unit.TimeValue;
 import io.crate.concurrent.CountdownFutureCallback;
 import io.crate.execution.support.RetryRunnable;
@@ -43,10 +44,13 @@ import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.HashSet;
@@ -64,17 +68,19 @@ public final class MetadataTracker implements Closeable {
     private final Function<String, Client> remoteClient;
     private final ClusterService clusterService;
     private final TimeValue pollDelay;
+    private final IndexScopedSettings indexScopedSettings;
 
     // Using a copy-on-write approach. The assumption is that subscription changes are rare and reads happen more frequently
     private volatile Set<String> subscriptionsToTrack = new HashSet<>();
     private volatile Scheduler.Cancellable cancellable;
     private volatile boolean isActive = false;
 
-    public MetadataTracker(Settings settings, ThreadPool threadPool, Function<String, Client> remoteClient, ClusterService clusterService) {
+    public MetadataTracker(SettingsModule settingModule, ThreadPool threadPool, Function<String, Client> remoteClient, ClusterService clusterService) {
         this.threadPool = threadPool;
         this.remoteClient = remoteClient;
         this.clusterService = clusterService;
-        this.pollDelay = LogicalReplicationSettings.REPLICATION_READ_POLL_DURATION.get(settings);
+        this.indexScopedSettings = settingModule.getIndexScopedSettings();
+        this.pollDelay = LogicalReplicationSettings.REPLICATION_READ_POLL_DURATION.get(settingModule.getSettings());
     }
 
     private void start() {
@@ -230,6 +236,79 @@ public final class MetadataTracker implements Closeable {
             return subscriberClusterState;
         }
     }
+
+    @Nullable
+    private Tuple<Settings, Boolean> updateSettings(IndexMetadata publisherMetadata, IndexMetadata subscriberMetadata) {
+        var staticUpdated = false;
+        var publisherSettings = publisherMetadata.getSettings().getAsGroups();
+        var subscriberSettings = subscriberMetadata.getSettings().getAsGroups();
+        Settings.Builder desiredSettingsBuilder = Settings.builder();
+        // Desired settings are taking publisher Settings and then overriding them with desired settings
+        for (var entry : publisherSettings.entrySet()) {
+            var remoteSettingKey = entry.getKey();
+            var remoteSettings = entry.getValue();
+            if (indexScopedSettings.isPrivateSetting(remoteSettingKey)) {
+                continue;
+            }
+            var remoteSetting = indexScopedSettings.get(remoteSettingKey);
+            Settings localSetting = subscriberSettings.get(remoteSettingKey);
+            if (!remoteSetting.isPrivateIndex()) {
+                desiredSettingsBuilder.copy(remoteSettingKey, remoteSettings);
+            }
+        }
+
+        var desiredSettings = desiredSettingsBuilder.build();
+
+        var changedSettingsBuilder = Settings.builder();
+        for (var key : desiredSettings.keySet()) {
+            if (!desiredSettings.get(key).equals(subscriberSettings.get(key))) {
+                //Not intended setting on follower side.
+                var setting = indexScopedSettings.get(key);
+                if (indexScopedSettings.isPrivateSetting(key)) {
+                    continue;
+                }
+                if (!setting.isDynamic()) {
+                    staticUpdated = true;
+                }
+                LOGGER.debug("Adding setting {}", key);
+                changedSettingsBuilder.copy(key, desiredSettings);
+            }
+        }
+
+        for (var key : subscriberSettings.keySet()) {
+            var setting = indexScopedSettings.get(key);
+
+            if (setting == null || setting.isPrivateIndex()) {
+                continue;
+            }
+
+            if (desiredSettings.get(key) == null) {
+                staticUpdated = true;
+            }
+
+            LOGGER.debug("Removing setting $key from $followerIndexName");
+            changedSettingsBuilder.putNull(key);
+        }
+
+        var changedSettings = changedSettingsBuilder.build();
+
+        if (changedSettings.keySet().isEmpty()) {
+            // Nothing to apply
+            return null;
+        }
+
+        return new Tuple<>(changedSettings, staticUpdated);
+    }
+
+    private ClusterState updateSettings(String indexName, Settings setting, boolean staticUpdate, ClusterState subscriberClusterState) {
+
+
+    }
+
+    private void closeIndex(String indexName) {
+        
+    }
+
 
     private void getRemoteClusterState(String subscriptionName, Consumer<ClusterState> consumer) {
         var client = remoteClient.apply(subscriptionName);

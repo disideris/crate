@@ -165,6 +165,8 @@ public class ShardReplicationService implements Closeable {
             }
         }
 
+
+
         @Override
         public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {
             var tracker = shards.remove(shardId);

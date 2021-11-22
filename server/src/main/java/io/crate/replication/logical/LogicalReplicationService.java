@@ -49,6 +49,7 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.CheckedConsumer;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.repositories.RepositoriesService;
@@ -92,16 +93,16 @@ public class LogicalReplicationService extends RemoteClusterAware implements Clu
     private volatile PublicationsMetadata currentPublicationsMetadata = new PublicationsMetadata();
     private final MetadataTracker metadataTracker;
 
-    public LogicalReplicationService(Settings settings,
+    public LogicalReplicationService(SettingsModule settingsModule,
                                      ClusterService clusterService,
                                      TransportService transportService,
                                      ThreadPool threadPool) {
-        super(settings);
+        super(settingsModule.getSettings());
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.threadPool = threadPool;
         this.metadataTracker = new MetadataTracker(
-            settings,
+            settingsModule,
             threadPool,
             subscriptionName -> getRemoteClusterClient(threadPool, subscriptionName),
             clusterService

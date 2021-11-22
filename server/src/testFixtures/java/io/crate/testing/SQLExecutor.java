@@ -127,6 +127,7 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.env.Environment;
@@ -306,7 +307,7 @@ public class SQLExecutor {
                 EmptyClusterInfoService.INSTANCE
             );
             logicalReplicationService = new LogicalReplicationService(
-                Settings.EMPTY,
+                new SettingsModule(Settings.EMPTY),
                 clusterService,
                 mock(TransportService.class),
                 mock(ThreadPool.class)

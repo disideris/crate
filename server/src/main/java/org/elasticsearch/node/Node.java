@@ -530,7 +530,7 @@ public class Node implements Closeable {
             final HttpServerTransport httpServerTransport = newHttpTransport(networkModule);
 
             final LogicalReplicationService logicalReplicationService = new LogicalReplicationService(
-                settings,
+                settingsModule,
                 clusterService,
                 transportService,
                 threadPool
