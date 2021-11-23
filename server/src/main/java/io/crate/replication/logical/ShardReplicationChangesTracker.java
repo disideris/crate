@@ -211,14 +211,9 @@ public class ShardReplicationChangesTracker implements Closeable {
                             Long toSeqNo,
                             CheckedConsumer<ShardChangesAction.Response, ? extends Exception> onSuccess,
                             Consumer<Exception> onFailure) {
-        shardReplicationService.getRemoteClusterClient(
-            shardId.getIndex(),
-            remoteClient -> {
-                var request = new ShardChangesAction.Request(shardId, fromSeqNo, toSeqNo);
-                remoteClient.execute(ShardChangesAction.INSTANCE, request, ActionListener.wrap(onSuccess, onFailure));
-            },
-            onFailure
-        );
+        Client remoteClient = shardReplicationService.getRemoteClusterClient(shardId.getIndex());
+        var request = new ShardChangesAction.Request(shardId, fromSeqNo, toSeqNo);
+        remoteClient.execute(ShardChangesAction.INSTANCE, request, ActionListener.wrap(onSuccess, onFailure));
     }
 
     /**
@@ -286,9 +281,9 @@ public class ShardReplicationChangesTracker implements Closeable {
         // has data until then.
         // Method is called inside a transport thread (response listener), so dispatch away
         threadPool.executor(ThreadPool.Names.LOGICAL_REPLICATION).execute(
-            () -> shardReplicationService.getRemoteClusterClient(
-                shardId.getIndex(),
-                client -> RetentionLeaseHelper.renewRetentionLease(
+            () -> {
+                var client = shardReplicationService.getRemoteClusterClient(shardId.getIndex());
+                RetentionLeaseHelper.renewRetentionLease(
                     shardId,
                     toSeqNoReceived,
                     clusterName,
@@ -306,10 +301,8 @@ public class ShardReplicationChangesTracker implements Closeable {
                             LOGGER.warn("Exception renewing retention lease.", e);
                         }
                     )
-                ),
-                e -> {
-                }
-            )
+                );
+            }
         );
     }
 
@@ -363,15 +356,12 @@ public class ShardReplicationChangesTracker implements Closeable {
         if (cancellable != null) {
             cancellable.cancel();
         }
-        shardReplicationService.getRemoteClusterClient(
-            shardId.getIndex(),
-            client -> RetentionLeaseHelper.attemptRetentionLeaseRemoval(
-                shardId,
-                clusterName,
-                client,
-                ActionListener.wrap(() -> {})
-            ),
-            e -> {}
+        Client client = shardReplicationService.getRemoteClusterClient(shardId.getIndex());
+        RetentionLeaseHelper.attemptRetentionLeaseRemoval(
+            shardId,
+            clusterName,
+            client,
+            ActionListener.wrap(() -> {})
         );
     }
 }
